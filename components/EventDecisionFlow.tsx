@@ -17,7 +17,6 @@ import {
   Sparkle,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
-import { featuredEvent } from "../lib/mock-data";
 import type { ArtistEvent } from "../lib/types";
 import { calculateFeasibility, defaultTimeAssumptions, type RiskMode, type TimeAssumptions } from "../lib/feasibility-engine";
 import { createLocalEstimate, createManualFlight, isValidFlightNumber, offlineFlightAdapter, type FlightCandidate, type FlightInputMode, type FlightLookupResult } from "../lib/flight-adapters";
@@ -55,7 +54,7 @@ function shiftDateKey(value: string, days: number) {
   return date.toISOString().slice(0, 10);
 }
 
-export function EventDecisionFlow({ onBack, event = featuredEvent }: EventDecisionFlowProps) {
+export function EventDecisionFlow({ onBack, event }: EventDecisionFlowProps) {
   const eventDay = dateKey(event.startsAt);
   const outboundDay = shiftDateKey(eventDay, -1);
   const returnDay = shiftDateKey(eventDay, 3);

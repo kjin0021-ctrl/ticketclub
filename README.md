@@ -19,7 +19,7 @@
 - 演唱会票根式活动卡片。
 - 可行性摘要和旅行期限内附近场次。
 - “去 / 考虑 / 不去”交互状态。
-- Mock 活动、可行性和附近场次数据。
+- 首页只展示经来源确认的真实活动；没有真实活动时保持诚实空状态。
 - 集中式品牌颜色、字体、字号、间距和按钮参数。
 
 ## 本地启动
@@ -87,10 +87,6 @@ pnpm test
 }
 ```
 
-### Mock 内容
-
-编辑 `lib/mock-data.ts`。页面组件不直接保存活动文案。
-
 ### 按钮结构
 
 编辑 `components/ui/Button.tsx`；按钮视觉统一在 `app/globals.css` 的 `.tc-button` 中调整。
@@ -105,7 +101,6 @@ pnpm test
 app/                 页面入口、字体和全局设计 Token
 components/          可复用界面组件
 components/ui/       基础控件
-lib/mock-data.ts     免费演示数据
 lib/types.ts         领域类型
 db/                  后续本地数据层
 tests/               服务端渲染与代码结构测试

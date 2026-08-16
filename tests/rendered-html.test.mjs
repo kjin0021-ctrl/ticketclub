@@ -23,16 +23,15 @@ test("server renders the TicketClub home experience", async () => {
 
   const html = await response.text();
   assert.match(html, /TicketClub 票来/);
-  assert.match(html, /Summer Memory Club/);
-  assert.match(html, /标准模式下赶得上/);
-  assert.match(html, /旅行期间附近场次/);
+  assert.match(html, /等待下一张真实票根/);
+  assert.match(html, /还没有确认过的真实活动/);
+  assert.doesNotMatch(html, /Summer Memory Club|Inkigayo|Music Bank|Fan Signing/);
   assert.doesNotMatch(html, /Your site is taking shape|Building your site/);
 });
 
-test("keeps adjustable design values and mock data out of components", async () => {
-  const [css, mockData, home, button] = await Promise.all([
+test("keeps adjustable design values and unverified events out of production UI", async () => {
+  const [css, home, button] = await Promise.all([
     readFile(new URL("app/globals.css", root), "utf8"),
-    readFile(new URL("lib/mock-data.ts", root), "utf8"),
     readFile(new URL("components/TicketClubHome.tsx", root), "utf8"),
     readFile(new URL("components/ui/Button.tsx", root), "utf8"),
   ]);
@@ -40,9 +39,8 @@ test("keeps adjustable design values and mock data out of components", async () 
   assert.match(css, /TICKETCLUB ADJUSTMENT PANEL/);
   assert.match(css, /--tc-button-height/);
   assert.match(css, /--tc-text-page-title/);
-  assert.match(mockData, /MOCK DATA/);
-  assert.match(mockData, /featuredEvent/);
-  assert.match(home, /aria-pressed/);
+  assert.doesNotMatch(home, /mock-data|featuredEvent|nearbyEvents/);
+  assert.match(home, /confirmedImportedEvents/);
   assert.match(home, /EventDecisionFlow/);
   assert.match(button, /ButtonHTMLAttributes/);
   assert.doesNotMatch(home, /#e8cdd8|#6c6d6a/);
