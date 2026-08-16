@@ -74,6 +74,8 @@ export interface ImportedPost {
   text?: string;
   importedAt: string;
   status?: "pending" | "confirmed" | "ignored";
+  origin?: "manual_x" | "github_monitor";
+  cloudIssueUrl?: string;
 }
 
 export interface ConfirmedImportedEvent {

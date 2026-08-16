@@ -13,6 +13,7 @@ import { ConfirmedEventDetail } from "./ConfirmedEventDetail";
 import { SpotLibrary } from "./SpotLibrary";
 import { NotificationCenter } from "./NotificationCenter";
 import { DeploymentSetup } from "./DeploymentSetup";
+import { syncGithubAlerts } from "../lib/github-alerts";
 
 export function TicketClubHome() {
   const [screen, setScreen] = useState<"home" | "decision" | "artists" | "inbox" | "confirmed-detail" | "spots" | "notifications" | "deployment">("home");
@@ -24,14 +25,16 @@ export function TicketClubHome() {
   const [decisionEvent, setDecisionEvent] = useState<ArtistEvent | null>(null);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const local = loadLocalState();
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      const local = await syncGithubAlerts().catch(() => loadLocalState());
+      if (!active) return;
       setPendingCount(local.importedPosts.filter((post) => (post.status ?? "pending") === "pending").length);
       setNotificationCount(local.notifications.filter((item) => !item.readAt).length);
       setConfirmedEvents([...local.confirmedImportedEvents].sort((a, b) => a.startsAt.localeCompare(b.startsAt)));
       setSavedArtists(local.artists);
     }, 0);
-    return () => window.clearTimeout(timer);
+    return () => { active = false; window.clearTimeout(timer); };
   }, [screen]);
 
   function confirmedDate(event: ConfirmedImportedEvent) {

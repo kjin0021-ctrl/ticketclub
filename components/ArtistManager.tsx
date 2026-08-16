@@ -127,7 +127,7 @@ export function ArtistManager({ onBack }: ArtistManagerProps) {
       setPostMessage("请粘贴包含 /status/帖子编号 的完整 X 链接。");
       return;
     }
-    refresh(saveImportedPost({ id: crypto.randomUUID(), artistId: selectedArtist.id, url: postUrl.trim(), text: postText.trim() || undefined, importedAt: new Date().toISOString(), status: "pending" }));
+    refresh(saveImportedPost({ id: crypto.randomUUID(), artistId: selectedArtist.id, url: postUrl.trim(), text: postText.trim() || undefined, importedAt: new Date().toISOString(), status: "pending", origin: "manual_x" }));
     setPostMessage("已保存到待识别列表，并保留原始 X 链接。");
     setPostUrl("");
     setPostText("");

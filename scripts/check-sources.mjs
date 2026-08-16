@@ -51,6 +51,15 @@ function normalizePublicPage(html) {
     .slice(0, 250000);
 }
 
+function summarizePageChange(content, previousContent = "") {
+  const previous = new Set(previousContent.split(/(?<=[.!?。！？])\s+/).map((part) => part.trim()).filter(Boolean));
+  const eventPattern = /20\d{2}|\d{1,2}[./-]\d{1,2}|concert|festival|fan\s?(?:meeting|sign)|music\s?(?:bank|show)|live|ticket|공연|콘서트|팬미팅|팬사인회|音乐节|演唱会|签售|公开录制/i;
+  const added = content.split(/(?<=[.!?。！？])\s+/)
+    .map((part) => part.trim())
+    .filter((part) => part.length >= 16 && part.length <= 500 && !previous.has(part) && eventPattern.test(part));
+  return [...new Set(added)].slice(0, 6).join("\n") || "页面内容与上次检查不同，但自动规则没有找到完整活动字段。请打开来源核对。";
+}
+
 for (const source of config.sources ?? []) {
   const old = previous.sources[source.id] ?? { items: {}, failures: 0 };
   try {
@@ -64,9 +73,9 @@ for (const source of config.sources ?? []) {
       if (old.pageHash && old.pageHash !== pageHash) alerts.push({
         kind: "公开页面有更新",
         source,
-        item: { title: source.label ?? `${source.artist} 公开页面`, description: "页面内容与上次检查不同，请打开来源确认是否出现新行程、改期或取消。", link: source.url },
+        item: { title: source.label ?? `${source.artist} 公开页面`, description: summarizePageChange(content, old.content), link: source.url },
       });
-      next.sources[source.id] = { pageHash, failures: 0, checkedAt: next.checkedAt };
+      next.sources[source.id] = { pageHash, content: content.slice(0, 100000), failures: 0, checkedAt: next.checkedAt };
       continue;
     }
     const items = entries(body);
@@ -110,10 +119,11 @@ if (!missing.length) {
 }
 
 if (!delivered && process.env.GITHUB_TOKEN && process.env.GITHUB_REPOSITORY) {
+  const structuredPayload = JSON.stringify({ version: 1, alerts: alerts.map(({ kind, source, item }) => ({ kind, artist: source.artist ?? source.id, sourceId: source.id, sourceLabel: source.label ?? source.id, title: item.title, text: item.description, url: item.link, detectedAt: next.checkedAt })) }, null, 2);
   const response = await fetch(`https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/issues`, {
     method: "POST",
     headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, "X-GitHub-Api-Version": "2022-11-28", "Content-Type": "application/json" },
-    body: JSON.stringify({ title: `TicketClub · ${alerts.length} 条行程提醒`, body: `${text}\n\n---\n由 TicketClub 自动检查创建。处理后可关闭此 Issue。` }),
+    body: JSON.stringify({ title: `TicketClub · ${alerts.length} 条行程提醒`, labels: ["ticketclub-alert"], body: `${text}\n\n<!-- ticketclub-alert-v1 -->\n\`\`\`json\n${structuredPayload}\n\`\`\`\n\n---\n由 TicketClub 自动检查创建。处理后可关闭此 Issue。` }),
   });
   if (response.ok) {
     console.log("TicketClub: delivered alerts through a GitHub Issue fallback.");

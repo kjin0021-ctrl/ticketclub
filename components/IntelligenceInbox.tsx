@@ -87,10 +87,10 @@ function PostReview({ post, artist, onResolve }: { post: ImportedPost; artist?: 
 
   return <div className="review-workspace">
     <section className="source-evidence">
-      <header><div><strong>{artist?.name ?? "未知艺人"}</strong><span>手动导入 · 原帖保留</span></div><a href={post.url} target="_blank" rel="noreferrer">在 X 查看 <ArrowSquareOut size={15} /></a></header>
+      <header><div><strong>{artist?.name ?? "未知艺人"}</strong><span>{post.origin === "github_monitor" ? "云端公开来源监测 · 待确认" : "手动导入 · 原帖保留"}</span></div><a href={post.url} target="_blank" rel="noreferrer">{post.origin === "github_monitor" ? "查看公开来源" : "在 X 查看"} <ArrowSquareOut size={15} /></a></header>
       <label><span>帖子正文</span><textarea value={sourceText} onChange={(event) => setSourceText(event.target.value)} rows={8} placeholder="如果只有链接，请从 X 复制正文到这里" /></label>
       <Button tone="secondary" onClick={rerun}>重新免费识别</Button>
-      <aside><Info size={18} /><p>当前使用日期、时间、活动关键词和地点规则，不会产生 API 费用。没有识别出的字段必须手动填写。</p></aside>
+      <aside><Info size={18} /><p>当前使用日期、时间、活动关键词和地点规则，不会产生 API 费用。云端页面变化不是正式行程；没有识别出的字段必须查看来源并手动确认。</p></aside>
     </section>
 
     <section className="extraction-sheet">

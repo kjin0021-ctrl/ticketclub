@@ -139,6 +139,8 @@ DESIGN.md            视觉系统约束
 
 如果 SMTP 未配置或被邮箱服务拒绝，工作流会降级为创建 GitHub Issue，确保提醒不会静默丢失。Issue 内容只包含公开来源的活动变化，不应写入个人地址或空闲时间。
 
+带有 `ticketclub-alert` 标签和版本化 JSON 证据的公开 Issue 会在打开 TicketClub 时同步到本机待确认收件箱。Fork 本项目时，请把 `NEXT_PUBLIC_GITHUB_REPOSITORY` 改为自己的 `owner/repository`。同步内容仍是待确认情报，不会自动成为正式行程。
+
 X 没有稳定的免费官方读取接口，因此本项目不声称直接绕过 X。可配置自建 RSSHub、其他合法 RSS 服务，或继续使用网页内“粘贴文字/截图后确认”的流程。GitHub Actions 不能读取浏览器 localStorage，所以邮件检查历史与网页通知中心目前明确分开保存。
 
 检查脚本可单独运行：`node scripts/check-sources.mjs`。

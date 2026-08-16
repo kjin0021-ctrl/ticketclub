@@ -1,5 +1,6 @@
 {
   "timezone": "Australia/Melbourne",
+  "githubRepository": "kjin0021-ctrl/ticketclub",
   "sources": [
     {
       "id": "kiiikiii-schedule-calendar",
