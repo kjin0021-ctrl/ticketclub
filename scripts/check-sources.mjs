@@ -15,6 +15,18 @@ const next = { checkedAt: new Date().toISOString(), sources: { ...previous.sourc
 const alerts = [];
 const cancellationPattern = /cancel(?:led|lation)?|postpone(?:d|ment)?|reschedule(?:d)?|取消|延期|中止|취소|연기/i;
 
+if (process.env.TICKETCLUB_TEST_EMAIL === "true") {
+  alerts.push({
+    kind: "连接测试",
+    source: { id: "ticketclub", artist: "TicketClub" },
+    item: {
+      title: "邮件提醒已经连接成功",
+      description: "这是一次手动测试，没有读取或修改任何艺人行程。",
+      link: "https://github.com/kjin0021-ctrl/ticketclub/actions",
+    },
+  });
+}
+
 function decode(value = "") {
   return value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ").trim();
 }

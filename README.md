@@ -137,6 +137,8 @@ DESIGN.md            视觉系统约束
 2. 在 GitHub 仓库的 `Settings → Secrets and variables → Actions` 添加：`SMTP_HOST`、`SMTP_PORT`、`SMTP_SECURE`、`SMTP_USER`、`SMTP_PASS`、`NOTIFY_EMAIL`。Gmail 通常使用 `smtp.gmail.com`、端口 `465`、`true`，密码应使用 App Password，不要提交邮箱密码。
 3. 打开 Actions，手动运行一次 `TicketClub daily check`。第一次只建立基线；第二次起有新增、变更、取消或连续三次失败才发信。
 
+若只想确认 SMTP 是否配置正确，手动运行时勾选 `Send one SMTP test email`。测试邮件不会读取或修改艺人行程。
+
 X 没有稳定的免费官方读取接口，因此本项目不声称直接绕过 X。可配置自建 RSSHub、其他合法 RSS 服务，或继续使用网页内“粘贴文字/截图后确认”的流程。GitHub Actions 不能读取浏览器 localStorage，所以邮件检查历史与网页通知中心目前明确分开保存。
 
 检查脚本可单独运行：`node scripts/check-sources.mjs`。

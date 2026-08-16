@@ -2,6 +2,12 @@ name: TicketClub daily check
 
 on:
   workflow_dispatch:
+    inputs:
+      send_test_email:
+        description: Send one SMTP test email without checking sources
+        required: false
+        type: boolean
+        default: false
   schedule:
     # Melbourne noon is 01:00 UTC in winter and 02:00 UTC in summer.
     - cron: "0 1,2 * * *"
@@ -32,6 +38,7 @@ jobs:
         run: node scripts/check-sources.mjs
         env:
           CHECK_LOCAL_NOON: ${{ github.event_name == 'schedule' }}
+          TICKETCLUB_TEST_EMAIL: ${{ inputs.send_test_email || 'false' }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           SMTP_SECURE: ${{ secrets.SMTP_SECURE }}
