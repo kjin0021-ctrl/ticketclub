@@ -27,7 +27,8 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - name: Install notification dependencies without lifecycle scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Restore check history
         uses: actions/cache/restore@v4
         with:
