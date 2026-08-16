@@ -1,0 +1,33 @@
+name: Feature request
+description: 提议一个符合自部署与隐私原则的功能
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: user_problem
+    attributes:
+      label: 用户问题
+      description: 请描述要解决的真实场景，而不只是按钮或页面方案。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议方案
+    validations:
+      required: true
+  - type: dropdown
+    id: cost
+    attributes:
+      label: 是否需要付费服务
+      options:
+        - 不需要
+        - 可选，不影响免费核心流程
+        - 需要，尚无免费降级方案
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: 数据来源与失效降级
+      description: 涉及第三方数据时，请说明权限、额度和失败时产品如何提示。

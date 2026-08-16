@@ -1,0 +1,47 @@
+name: TicketClub daily check
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Melbourne noon is 01:00 UTC in winter and 02:00 UTC in summer.
+    - cron: "0 1,2 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Restore check history
+        uses: actions/cache/restore@v4
+        with:
+          path: .ticketclub-state.json
+          key: ticketclub-state-${{ github.run_id }}
+          restore-keys: ticketclub-state-
+      - name: Only continue at local noon
+        run: node scripts/check-sources.mjs
+        env:
+          CHECK_LOCAL_NOON: ${{ github.event_name == 'schedule' }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_SECURE: ${{ secrets.SMTP_SECURE }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+      - name: Save check history
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .ticketclub-state.json
+          key: ticketclub-state-${{ github.run_id }}

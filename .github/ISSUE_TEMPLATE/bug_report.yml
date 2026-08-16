@@ -1,0 +1,40 @@
+name: Bug report
+description: 报告可以稳定复现的问题
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: 请先移除截图、日志和导出文件中的地址、空闲时间、密钥及账号信息。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 问题描述
+      description: 实际发生了什么？你原本期待什么？
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      placeholder: "1. 打开…\n2. 点击…\n3. 看到…"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 环境
+      placeholder: macOS 15 / Chrome 130 / TicketClub commit SHA
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 已脱敏的日志或截图
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 隐私确认
+      options:
+        - label: 我已移除密钥、Cookie、私人地址和非公开行程信息。
+          required: true
