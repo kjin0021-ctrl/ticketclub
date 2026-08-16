@@ -74,13 +74,36 @@ if (!alerts.length) {
 
 const required = ["SMTP_HOST", "SMTP_USER", "SMTP_PASS", "NOTIFY_EMAIL"];
 const missing = required.filter((name) => !process.env[name]);
-if (missing.length) {
-  console.log(JSON.stringify(alerts, null, 2));
-  console.error(`Alerts found, but email is not configured. Missing: ${missing.join(", ")}`);
-  process.exitCode = 2;
-} else {
+const text = alerts.map(({ kind, source, item }) => `[${kind}] ${source.artist ?? source.id}\n${item.title}\n${item.description}\n${item.link}`).join("\n\n---\n\n");
+let delivered = false;
+
+if (!missing.length) {
   const transporter = nodemailer.createTransport({ host: process.env.SMTP_HOST, port: Number(process.env.SMTP_PORT ?? 465), secure: (process.env.SMTP_SECURE ?? "true") !== "false", auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } });
-  const text = alerts.map(({ kind, source, item }) => `[${kind}] ${source.artist ?? source.id}\n${item.title}\n${item.description}\n${item.link}`).join("\n\n---\n\n");
-  await transporter.sendMail({ from: process.env.SMTP_FROM ?? process.env.SMTP_USER, to: process.env.NOTIFY_EMAIL, subject: `TicketClub · ${alerts.length} 条行程变化`, text });
-  console.log(`TicketClub: sent ${alerts.length} alert(s).`);
+  try {
+    await transporter.sendMail({ from: process.env.SMTP_FROM ?? process.env.SMTP_USER, to: process.env.NOTIFY_EMAIL, subject: `TicketClub · ${alerts.length} 条行程变化`, text });
+    console.log(`TicketClub: sent ${alerts.length} alert(s) by email.`);
+    delivered = true;
+  } catch (error) {
+    console.warn(`TicketClub: email failed (${error instanceof Error ? error.message.split("\n")[0] : "unknown error"}); trying GitHub Issues.`);
+  }
+}
+
+if (!delivered && process.env.GITHUB_TOKEN && process.env.GITHUB_REPOSITORY) {
+  const response = await fetch(`https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/issues`, {
+    method: "POST",
+    headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, "X-GitHub-Api-Version": "2022-11-28", "Content-Type": "application/json" },
+    body: JSON.stringify({ title: `TicketClub · ${alerts.length} 条行程提醒`, body: `${text}\n\n---\n由 TicketClub 自动检查创建。处理后可关闭此 Issue。` }),
+  });
+  if (response.ok) {
+    console.log("TicketClub: delivered alerts through a GitHub Issue fallback.");
+    delivered = true;
+  } else {
+    console.error(`TicketClub: GitHub Issue fallback failed with HTTP ${response.status}.`);
+  }
+}
+
+if (!delivered) {
+  console.log(JSON.stringify(alerts, null, 2));
+  console.error(`TicketClub: alerts could not be delivered. Missing email settings: ${missing.join(", ") || "none"}.`);
+  process.exitCode = 2;
 }

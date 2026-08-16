@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   check:
@@ -47,6 +48,8 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           SMTP_FROM: ${{ secrets.SMTP_FROM }}
           NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
       - name: Save check history
         if: always()
         uses: actions/cache/save@v4
