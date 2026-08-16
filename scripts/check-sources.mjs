@@ -43,12 +43,33 @@ function entries(xml) {
   }).filter((item) => item.id);
 }
 
+function normalizePublicPage(html) {
+  return decode(html
+    .replace(/<!--([\s\S]*?)-->/g, " ")
+    .replace(/<(script|style|noscript|svg)\b[\s\S]*?<\/\1>/gi, " ")
+    .replace(/\b(?:nonce|integrity|data-reactroot|data-v-[\w-]+)=["'][^"']*["']/gi, " "))
+    .slice(0, 250000);
+}
+
 for (const source of config.sources ?? []) {
   const old = previous.sources[source.id] ?? { items: {}, failures: 0 };
   try {
     const response = await fetch(source.url, { headers: { Accept: "application/rss+xml, application/atom+xml, text/xml" } });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const items = entries(await response.text());
+    const body = await response.text();
+    if (source.kind === "web") {
+      const content = normalizePublicPage(body);
+      if (content.length < 120) throw new Error("公开页面没有足够的可读取内容");
+      const pageHash = createHash("sha256").update(content).digest("hex");
+      if (old.pageHash && old.pageHash !== pageHash) alerts.push({
+        kind: "公开页面有更新",
+        source,
+        item: { title: source.label ?? `${source.artist} 公开页面`, description: "页面内容与上次检查不同，请打开来源确认是否出现新行程、改期或取消。", link: source.url },
+      });
+      next.sources[source.id] = { pageHash, failures: 0, checkedAt: next.checkedAt };
+      continue;
+    }
+    const items = entries(body);
     if (!items.length) throw new Error("订阅没有可读取的条目");
     const current = Object.fromEntries(items.map((item) => [item.id, item.hash]));
     if (Object.keys(old.items ?? {}).length) {

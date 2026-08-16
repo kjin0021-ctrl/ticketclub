@@ -117,6 +117,8 @@ DESIGN.md            视觉系统约束
 
 网页内通知中心保存在本机；GitHub Actions 可以免费定时检查 RSS，并用你自己的 SMTP 发邮件。
 
+仓库默认示范监测 KiiiKiii 的公开日程页与 Universal Music Japan 新闻页。网页监测只判断公开内容是否变化，不会把变化自动伪装成已确认活动；收到提醒后仍应打开来源核对。
+
 ## 配置每天中午检查
 
 1. 编辑 `config/ticketclub.json`，加入一个或多个 RSS/Atom 地址：
@@ -128,6 +130,7 @@ DESIGN.md            视觉系统约束
     {
       "id": "kiiikiii-x-rss",
       "artist": "KiiiKiii",
+      "kind": "rss",
       "url": "https://你的-rss-服务地址"
     }
   ]

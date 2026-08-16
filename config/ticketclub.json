@@ -1,4 +1,19 @@
 {
   "timezone": "Australia/Melbourne",
-  "sources": []
+  "sources": [
+    {
+      "id": "kiiikiii-schedule-calendar",
+      "artist": "KiiiKiii",
+      "kind": "web",
+      "label": "KiiiKiii public schedule calendar",
+      "url": "https://www.myloveidol.com/schedule/101362?locale=en"
+    },
+    {
+      "id": "kiiikiii-universal-news",
+      "artist": "KiiiKiii",
+      "kind": "web",
+      "label": "Universal Music Japan · KiiiKiii news",
+      "url": "https://www.universal-music.co.jp/kiiikiii/news/"
+    }
+  ]
 }
