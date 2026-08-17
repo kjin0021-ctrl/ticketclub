@@ -21,7 +21,6 @@
     "nodemailer": "^9.0.5",
     "react": "19.2.6",
     "react-dom": "19.2.6",
-    "react-loading-skeleton": "3.5.0",
     "tesseract.js": "7.0.0"
   },
   "devDependencies": {
