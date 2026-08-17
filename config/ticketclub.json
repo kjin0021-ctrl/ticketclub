@@ -6,6 +6,7 @@
       "id": "kiiikiii-schedule-calendar",
       "artist": "KiiiKiii",
       "kind": "web",
+      "sourceTrust": "fan",
       "label": "KiiiKiii public schedule calendar",
       "url": "https://www.myloveidol.com/schedule/101362?locale=en"
     },
@@ -13,6 +14,7 @@
       "id": "kiiikiii-universal-news",
       "artist": "KiiiKiii",
       "kind": "web",
+      "sourceTrust": "organizer_official",
       "label": "Universal Music Japan · KiiiKiii news",
       "url": "https://www.universal-music.co.jp/kiiikiii/news/"
     }

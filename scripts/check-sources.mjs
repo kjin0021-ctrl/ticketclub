@@ -119,7 +119,7 @@ if (!missing.length) {
 }
 
 if (!delivered && process.env.GITHUB_TOKEN && process.env.GITHUB_REPOSITORY) {
-  const structuredPayload = JSON.stringify({ version: 1, alerts: alerts.map(({ kind, source, item }) => ({ kind, artist: source.artist ?? source.id, sourceId: source.id, sourceLabel: source.label ?? source.id, title: item.title, text: item.description, url: item.link, detectedAt: next.checkedAt })) }, null, 2);
+  const structuredPayload = JSON.stringify({ version: 1, alerts: alerts.map(({ kind, source, item }) => ({ kind, artist: source.artist ?? source.id, sourceId: source.id, sourceLabel: source.label ?? source.id, sourceTrust: source.sourceTrust ?? "media", title: item.title, text: item.description, url: item.link, detectedAt: next.checkedAt })) }, null, 2);
   const response = await fetch(`https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/issues`, {
     method: "POST",
     headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, "X-GitHub-Api-Version": "2022-11-28", "Content-Type": "application/json" },

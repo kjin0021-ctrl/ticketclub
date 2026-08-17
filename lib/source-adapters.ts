@@ -24,6 +24,15 @@ export function isXPostUrl(value: string) {
   }
 }
 
+export function isPublicAnnouncementUrl(value: string) {
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "https:" && Boolean(url.hostname) && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+
 export interface RssConnectionResult {
   ok: boolean;
   itemCount: number;

@@ -19,8 +19,10 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import type { ArtistEvent } from "../lib/types";
 import { calculateFeasibility, defaultTimeAssumptions, type RiskMode, type TimeAssumptions } from "../lib/feasibility-engine";
-import { createLocalEstimate, createManualFlight, isValidFlightNumber, offlineFlightAdapter, type FlightCandidate, type FlightInputMode, type FlightLookupResult } from "../lib/flight-adapters";
+import { createLocalEstimate, createLocalReturnEstimate, createManualFlight, isValidFlightNumber, offlineFlightAdapter, type FlightCandidate, type FlightInputMode, type FlightLookupResult } from "../lib/flight-adapters";
 import { buildFlightSearchLinks, parseFlightSearchText } from "../lib/flight-import";
+import { extractAvailabilityFromText } from "../lib/availability-extractor";
+import { compareFlightStrategies } from "../lib/flight-strategies";
 import { loadLocalState, saveAvailability, saveDecisionDraft, saveFeasibilityRun, saveTimeAssumptions } from "../lib/local-store";
 import { Button } from "./ui/Button";
 import { TripPlanView } from "./TripPlanView";
@@ -58,6 +60,7 @@ export function EventDecisionFlow({ onBack, event }: EventDecisionFlowProps) {
   const eventDay = dateKey(event.startsAt);
   const outboundDay = shiftDateKey(eventDay, -1);
   const returnDay = shiftDateKey(eventDay, 3);
+  const returnFlightDay = shiftDateKey(returnDay, -1);
   const [step, setStep] = useState<DecisionStep>("event");
   const [availabilityText, setAvailabilityText] = useState("");
   const [fileName, setFileName] = useState("");
@@ -73,7 +76,12 @@ export function EventDecisionFlow({ onBack, event }: EventDecisionFlowProps) {
   const [flightStops, setFlightStops] = useState(0);
   const [originAirport, setOriginAirport] = useState("MEL");
   const [destinationAirport, setDestinationAirport] = useState("ICN");
-  const [assumedReturnHomeAt, setAssumedReturnHomeAt] = useState(`${returnDay}T06:00`);
+  const [returnFlightNumber, setReturnFlightNumber] = useState("");
+  const [returnFlightDepartureAt, setReturnFlightDepartureAt] = useState(`${returnFlightDay}T20:00`);
+  const [returnFlightArrivalAt, setReturnFlightArrivalAt] = useState(`${returnDay}T07:00`);
+  const [returnFlightStops, setReturnFlightStops] = useState(0);
+  const [returnOriginAirport, setReturnOriginAirport] = useState("ICN");
+  const [returnDestinationAirport, setReturnDestinationAirport] = useState("MEL");
   const [remoteFlights, setRemoteFlights] = useState<FlightCandidate[]>([]);
   const [selectedRemoteFlight, setSelectedRemoteFlight] = useState<FlightCandidate | null>(null);
   const [flightSearchState, setFlightSearchState] = useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -106,6 +114,9 @@ export function EventDecisionFlow({ onBack, event }: EventDecisionFlowProps) {
       originAirport,
       destinationAirport,
     }), [destinationAirport, eventDay, flightArrivalAt, flightDepartureAt, flightMode, flightNumber, flightStops, originAirport, outboundDay, selectedRemoteFlight]);
+  const selectedReturnFlight = useMemo(() => returnFlightNumber.trim()
+    ? createManualFlight({ flightNumber: returnFlightNumber, departureAt: `${returnFlightDepartureAt}:00+09:00`, arrivalAt: `${returnFlightArrivalAt}:00+10:00`, stops: returnFlightStops, originAirport: returnOriginAirport, destinationAirport: returnDestinationAirport })
+    : createLocalReturnEstimate({ departureAt: `${returnFlightDepartureAt}:00+09:00`, arrivalAt: `${returnFlightArrivalAt}:00+10:00`, originAirport: returnOriginAirport, destinationAirport: returnDestinationAirport }), [returnDestinationAirport, returnFlightArrivalAt, returnFlightDepartureAt, returnFlightNumber, returnFlightStops, returnOriginAirport]);
   const calculation = useMemo(() => calculateFeasibility({
     availableFrom: `${availableFrom}:00+10:00`,
     mustReturnBy: `${mustReturnBy}:00+10:00`,
@@ -113,15 +124,26 @@ export function EventDecisionFlow({ onBack, event }: EventDecisionFlowProps) {
     eventCheckInAt: event.checkInAt,
     riskMode: risk,
     outboundFlight: selectedFlight,
-    assumedReturnHomeAt: `${assumedReturnHomeAt}:00+10:00`,
+    returnFlight: selectedReturnFlight,
     assumptions: timeAssumptions,
-  }), [assumedReturnHomeAt, availableFrom, event.checkInAt, event.startsAt, mustReturnBy, risk, selectedFlight, timeAssumptions]);
+  }), [availableFrom, event.checkInAt, event.startsAt, mustReturnBy, risk, selectedFlight, selectedReturnFlight, timeAssumptions]);
+  const flightStrategies = useMemo(() => compareFlightStrategies([selectedFlight, ...remoteFlights], {
+    availableFrom: `${availableFrom}:00+10:00`, mustReturnBy: `${mustReturnBy}:00+10:00`, eventStartsAt: event.startsAt,
+    eventCheckInAt: event.checkInAt, riskMode: risk, returnFlight: selectedReturnFlight, assumptions: timeAssumptions,
+  }), [availableFrom, event.checkInAt, event.startsAt, mustReturnBy, remoteFlights, risk, selectedFlight, selectedReturnFlight, timeAssumptions]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const local = loadLocalState();
       const draft = local.decisionDrafts[event.id];
-      setTimeAssumptions(draft?.timeAssumptions ?? local.timeAssumptions);
+      setTimeAssumptions({
+        ...local.timeAssumptions,
+        ...(draft?.timeAssumptions ?? {}),
+        venueArrivalLeadMinutes: {
+          ...local.timeAssumptions.venueArrivalLeadMinutes,
+          ...(draft?.timeAssumptions?.venueArrivalLeadMinutes ?? {}),
+        },
+      });
       if (draft) {
         setAvailabilityText(draft.availabilityText);
         setFileName(draft.screenshotName);
@@ -136,13 +158,18 @@ export function EventDecisionFlow({ onBack, event }: EventDecisionFlowProps) {
         setFlightStops(draft.flightStops ?? 0);
         setOriginAirport(draft.originAirport ?? "MEL");
         setDestinationAirport(draft.destinationAirport ?? "ICN");
-        setAssumedReturnHomeAt(draft.assumedReturnHomeAt ?? `${returnDay}T06:00`);
+        setReturnFlightNumber(draft.returnFlightNumber ?? "");
+        setReturnFlightDepartureAt(draft.returnFlightDepartureAt ?? `${returnFlightDay}T20:00`);
+        setReturnFlightArrivalAt(draft.returnFlightArrivalAt ?? `${returnDay}T07:00`);
+        setReturnFlightStops(draft.returnFlightStops ?? 0);
+        setReturnOriginAirport(draft.returnOriginAirport ?? "ICN");
+        setReturnDestinationAirport(draft.returnDestinationAirport ?? "MEL");
         setSavedAt(draft.updatedAt);
       }
       setStorageReady(true);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [event.id, eventDay, outboundDay, returnDay]);
+  }, [event.id, eventDay, outboundDay, returnDay, returnFlightDay]);
 
   useEffect(() => {
     if (!storageReady) return;
@@ -163,14 +190,19 @@ export function EventDecisionFlow({ onBack, event }: EventDecisionFlowProps) {
         flightStops,
         originAirport,
         destinationAirport,
-        assumedReturnHomeAt,
+        returnFlightNumber,
+        returnFlightDepartureAt,
+        returnFlightArrivalAt,
+        returnFlightStops,
+        returnOriginAirport,
+        returnDestinationAirport,
         timeAssumptions,
         updatedAt,
       });
       setSavedAt(updatedAt);
     }, 350);
     return () => window.clearTimeout(timer);
-  }, [assumedReturnHomeAt, availabilityText, availableFrom, destinationAirport, event.id, fileName, flightArrivalAt, flightDepartureAt, flightMode, flightNumber, flightStops, mustReturnBy, origin, originAirport, risk, storageReady, timeAssumptions]);
+  }, [availabilityText, availableFrom, destinationAirport, event.id, fileName, flightArrivalAt, flightDepartureAt, flightMode, flightNumber, flightStops, mustReturnBy, origin, originAirport, returnDestinationAirport, returnFlightArrivalAt, returnFlightDepartureAt, returnFlightNumber, returnFlightStops, returnOriginAirport, risk, storageReady, timeAssumptions]);
 
   function updateAssumption(key: keyof Omit<TimeAssumptions, "venueArrivalLeadMinutes">, value: number) {
     setTimeAssumptions((current) => ({ ...current, [key]: Math.max(0, value) }));
@@ -260,12 +292,16 @@ export function EventDecisionFlow({ onBack, event }: EventDecisionFlowProps) {
       hour: "2-digit",
       minute: "2-digit",
       hour12: false,
-      timeZone: id === "leave-home" || id === "flight" ? "Australia/Melbourne" : "Asia/Seoul",
+      timeZone: id === "leave-home" || id === "flight" || id === "return-home" ? "Australia/Melbourne" : "Asia/Seoul",
     }).format(new Date(iso)).replace("/", ".");
   }
 
   function recognizeAvailability() {
     if (!canRecognize) return;
+    const extracted = extractAvailabilityFromText(availabilityText, Number(eventDay.slice(0, 4)));
+    if (extracted.availableFrom) setAvailableFrom(extracted.availableFrom);
+    if (extracted.mustReturnBy) setMustReturnBy(extracted.mustReturnBy);
+    if (extracted.origin) setOrigin(extracted.origin);
     setStep("confirm");
   }
 
@@ -330,7 +366,7 @@ export function EventDecisionFlow({ onBack, event }: EventDecisionFlowProps) {
                 <div><dt><ShieldCheck size={17} /> 信息来源</dt><dd>{event.sourceLabel}<small>已确认 · 原帖可追溯</small></dd></div>
               </dl>
               <div className="source-preview">
-                <span>ORIGINAL POST · X</span>
+                <span>ORIGINAL PUBLIC SOURCE</span>
                 <p>活动来自 {event.sourceLabel}，原帖内容与来源链接已保存在活动详情中。</p>
               </div>
               <footer className="flow-panel-actions">
@@ -361,7 +397,6 @@ export function EventDecisionFlow({ onBack, event }: EventDecisionFlowProps) {
                 <span>{fileName ? "图片已收到，下一步可确认识别结果" : "PNG、JPG，单张不超过 10 MB"}</span>
                 <input type="file" accept="image/png,image/jpeg" onChange={(event) => setFileName(event.target.files?.[0]?.name ?? "")} />
               </label>
-              <button className="sample-button" type="button" onClick={() => setAvailabilityText(sampleAvailability)}>使用演示文字</button>
               <footer className="flow-panel-actions">
                 <Button tone="secondary" onClick={() => setStep("event")}>上一步</Button>
                 <Button tone="primary" disabled={!canRecognize} onClick={recognizeAvailability} icon={<Sparkle size={16} weight="fill" />}>识别空闲时间</Button>
@@ -387,6 +422,9 @@ export function EventDecisionFlow({ onBack, event }: EventDecisionFlowProps) {
                   <label><span>提前到机场</span><div><input type="number" min="0" max="480" value={timeAssumptions.airportAdvanceMinutes} onChange={(input) => updateAssumption("airportAdvanceMinutes", Number(input.target.value))} /><small>分钟</small></div></label>
                   <label><span>入境与取行李</span><div><input type="number" min="0" max="360" value={timeAssumptions.immigrationMinutes} onChange={(input) => updateAssumption("immigrationMinutes", Number(input.target.value))} /><small>分钟</small></div></label>
                   <label><span>机场到场馆</span><div><input type="number" min="0" max="360" value={timeAssumptions.arrivalAirportToVenueMinutes} onChange={(input) => updateAssumption("arrivalAirportToVenueMinutes", Number(input.target.value))} /><small>分钟</small></div></label>
+                  <label><span>演出时长估算</span><div><input type="number" min="30" max="600" value={timeAssumptions.eventDurationMinutes} onChange={(input) => updateAssumption("eventDurationMinutes", Number(input.target.value))} /><small>分钟</small></div></label>
+                  <label><span>散场离场</span><div><input type="number" min="0" max="240" value={timeAssumptions.postEventExitMinutes} onChange={(input) => updateAssumption("postEventExitMinutes", Number(input.target.value))} /><small>分钟</small></div></label>
+                  <label><span>场馆到机场</span><div><input type="number" min="0" max="360" value={timeAssumptions.venueToAirportMinutes} onChange={(input) => updateAssumption("venueToAirportMinutes", Number(input.target.value))} /><small>分钟</small></div></label>
                 </div>
                 <div className="risk-lead-fields">
                   <span>到场提前量</span>
@@ -454,7 +492,18 @@ export function EventDecisionFlow({ onBack, event }: EventDecisionFlowProps) {
                   <label><span>抵达时间（韩国）</span><input type="datetime-local" value={flightArrivalAt} onChange={(input) => setFlightArrivalAt(input.target.value)} /></label>
                   <label><span>转机次数</span><input type="number" min="0" max="4" value={flightStops} onChange={(input) => setFlightStops(Number(input.target.value))} /></label>
                 </div> : null}
-                <label className="return-home-field"><span>预计返程到家时间</span><input type="datetime-local" value={assumedReturnHomeAt} onChange={(input) => setAssumedReturnHomeAt(input.target.value)} /></label>
+                <section className="flight-browser-import" aria-labelledby="return-flight-title">
+                  <header><div><h4 id="return-flight-title">返程航班与回家期限</h4><p>系统会从预计散场开始，计算离场、去机场和值机时间，再判断能否赶上返程。</p></div><span>{returnFlightNumber ? "USER CONFIRMED" : "LOCAL ESTIMATE"}</span></header>
+                  <div className="flight-schedule-grid">
+                    <label><span>返程航班号（可留空）</span><input value={returnFlightNumber} onChange={(input) => setReturnFlightNumber(input.target.value.toUpperCase())} placeholder="例如 KE401" /></label>
+                    <label><span>转机次数</span><input type="number" min="0" max="4" value={returnFlightStops} onChange={(input) => setReturnFlightStops(Number(input.target.value))} /></label>
+                    <label><span>韩国起飞机场</span><input value={returnOriginAirport} onChange={(input) => setReturnOriginAirport(input.target.value.toUpperCase())} maxLength={4} /></label>
+                    <label><span>回程抵达机场</span><input value={returnDestinationAirport} onChange={(input) => setReturnDestinationAirport(input.target.value.toUpperCase())} maxLength={4} /></label>
+                    <label><span>返程起飞（韩国时间）</span><input type="datetime-local" value={returnFlightDepartureAt} onChange={(input) => setReturnFlightDepartureAt(input.target.value)} /></label>
+                    <label><span>返程抵达（出发地时间）</span><input type="datetime-local" value={returnFlightArrivalAt} onChange={(input) => setReturnFlightArrivalAt(input.target.value)} /></label>
+                  </div>
+                  <p className="real-flight-message">留空航班号时只做时间估算；填入真实航班后，请仍以航司页面为准。</p>
+                </section>
               </section>
               <footer className="flow-panel-actions">
                 <Button tone="secondary" onClick={() => setStep("availability")}>重新识别</Button>
@@ -469,6 +518,10 @@ export function EventDecisionFlow({ onBack, event }: EventDecisionFlowProps) {
               <p className="flow-artist">{event.artist} · {event.city.toUpperCase()}</p>
               <h2>{calculation.feasible ? `${risk === "relaxed" ? "悠闲" : risk === "extreme" ? "极限" : "标准"}模式下赶得上` : "当前条件下不建议出发"}</h2>
               <p className="result-summary">{calculation.reason}。最晚从 {origin} 离开的时间为 <strong>{formatTimelineTime(calculation.latestHomeDepartureAt, "leave-home")}</strong>{calculation.eventBufferMinutes >= 0 ? <>，抵达场馆后仍有 <strong>{calculation.eventBufferMinutes} 分钟</strong>余量。</> : <>，预计会晚 <strong>{Math.abs(calculation.eventBufferMinutes)} 分钟</strong>。</>}</p>
+              <div className="flight-candidate flight-candidate--selected">
+                <div><span>ROUND TRIP VERDICT</span><strong>{calculation.outboundFeasible ? "去程可行" : "去程不可行"} · {calculation.returnFeasible ? "返程可行" : "返程不可行"}</strong><p>{calculation.needsExtraNight ? "当前返程安排需要在演出后过夜" : "当前返程不额外跨夜"} · 预计 {formatTimelineTime(calculation.returnHomeAt, "return-home")} 到家</p></div>
+                <em>{calculation.returnFeasible ? "往返闭环" : calculation.canCatchReturnFlight ? "超过期限" : "赶不上返程"}</em>
+              </div>
               <ol className="route-timeline">
                 {calculation.timeline.map((item) => <li key={item.id}><time>{formatTimelineTime(item.at, item.id)}</time><div><strong>{item.id === "leave-home" ? `从 ${origin} 出发` : item.id === "venue" ? `抵达 ${event.venue} 周边` : item.title}</strong><span>{item.detail}</span></div></li>)}
               </ol>
@@ -478,8 +531,15 @@ export function EventDecisionFlow({ onBack, event }: EventDecisionFlowProps) {
                 <div><dt>机场提前</dt><dd>{calculation.assumptions.airportAdvanceMinutes} 分钟</dd></div>
                 <div><dt>入境取行李</dt><dd>{calculation.assumptions.immigrationMinutes} 分钟</dd></div>
                 <div><dt>机场到场馆</dt><dd>{calculation.assumptions.arrivalAirportToVenueMinutes} 分钟</dd></div>
+                <div><dt>散场与离场</dt><dd>{calculation.assumptions.eventDurationMinutes + calculation.assumptions.postEventExitMinutes} 分钟</dd></div>
+                <div><dt>场馆到机场</dt><dd>{calculation.assumptions.venueToAirportMinutes} 分钟</dd></div>
                 <div><dt>{risk === "relaxed" ? "悠闲" : risk === "extreme" ? "极限" : "标准"}提前量</dt><dd>{calculation.assumptions.venueArrivalLeadMinutes[risk]} 分钟</dd></div>
               </dl>
+              <section className="strategy-comparison" aria-labelledby="strategy-title">
+                <header><div><h3 id="strategy-title">四种出发方案</h3><p>{remoteFlights.length > 1 ? `正在比较 ${new Set([selectedFlight.id, ...remoteFlights.map((item) => item.id)]).size} 个候选` : "当前候选较少；相同航班可能同时成为多个方案"}</p></div><span>{selectedFlight.verifiedLive ? "候选数据" : "时间估算"}</span></header>
+                <div>{flightStrategies.map((strategy) => <article key={strategy.kind} className={strategy.candidate?.id === selectedFlight.id ? "is-selected" : ""}><div><strong>{strategy.title}</strong><small>{strategy.rationale}</small></div>{strategy.candidate && strategy.result ? <><p><b>{strategy.candidate.flightNumber}</b><span>{strategy.candidate.stops ? `${strategy.candidate.stops} 次转机` : "直飞"} · 缓冲 {strategy.result.eventBufferMinutes} 分钟</span></p><p><span>{flightTime(strategy.candidate.departureAt, "Australia/Melbourne")} → {flightTime(strategy.candidate.arrivalAt, "Asia/Seoul")}</span><b>{strategy.candidate.price ? `${strategy.candidate.price.currency} ${strategy.candidate.price.amount}` : "无价格"}</b></p>{strategy.candidate.id !== selectedFlight.id && strategy.candidate.source !== "local-estimate" ? <button type="button" onClick={() => setSelectedRemoteFlight(strategy.candidate!)}>采用此候选</button> : <em>{strategy.candidate.id === selectedFlight.id ? "当前采用" : "规划参考"}</em>}</> : <p className="strategy-unavailable">{strategy.unavailableReason}</p>}</article>)}</div>
+                <aside>“最经济”只在候选明确包含价格时出现；TicketClub 不推测票价。</aside>
+              </section>
               <footer className="flow-panel-actions">
                 <Button tone="secondary" onClick={() => setStep("confirm")}>调整条件</Button>
                 <Button tone="primary" onClick={() => setStep("plan")}>生成首尔旅行计划</Button>
@@ -487,11 +547,11 @@ export function EventDecisionFlow({ onBack, event }: EventDecisionFlowProps) {
             </section>
           ) : null}
 
-          {step === "plan" ? <TripPlanView event={event} flight={selectedFlight} feasibility={calculation} assumedReturnHomeAt={`${assumedReturnHomeAt}:00+10:00`} onBack={() => setStep("result")} /> : null}
+          {step === "plan" ? <TripPlanView event={event} flight={selectedFlight} returnFlight={selectedReturnFlight} feasibility={calculation} onBack={() => setStep("result")} /> : null}
         </div>
 
         <aside className="flow-ticket-summary">
-          <span>YOUR LIVE TICKET</span>
+          <span>NOW CHECKING</span>
           <h2>{event.title}</h2>
           <p>{event.artist} · {event.type}</p>
           <div className="mini-ticket-meta"><span>{eventDay.slice(5).replace("-", ".")}</span><span>{new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Seoul" }).format(new Date(event.startsAt))}</span><span>{event.city.toUpperCase()}</span></div>

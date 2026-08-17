@@ -40,3 +40,7 @@ yarn-error.log*
 /outputs/
 /work/
 /.ticketclub-state.json
+
+# local design and review workspaces
+/.codex/
+/.impeccable/

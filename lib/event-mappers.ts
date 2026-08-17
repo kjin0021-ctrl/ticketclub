@@ -14,7 +14,8 @@ export function confirmedEventToArtistEvent(
     country: event.countryCode === "KR" ? "Korea" : event.countryCode,
     venue: event.venue,
     startsAt: event.startsAt,
-    sourceLabel: `${event.sourcePostIds.length || 1} 条 X 来源`,
+    checkInAt: event.rehearsalAt ?? event.checkInAt,
+    sourceLabel: `${event.sourcePostIds.length || 1} 条公开来源`,
     confidence: "official",
   };
 }

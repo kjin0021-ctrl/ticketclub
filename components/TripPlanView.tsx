@@ -11,19 +11,19 @@ import { Button } from "./ui/Button";
 interface Props {
   event: ArtistEvent;
   flight: CandidateFlight;
+  returnFlight: CandidateFlight;
   feasibility: FeasibilityResult;
-  assumedReturnHomeAt: string;
   onBack: () => void;
 }
 
-export function TripPlanView({ event, flight, feasibility, assumedReturnHomeAt, onBack }: Props) {
+export function TripPlanView({ event, flight, returnFlight, feasibility, onBack }: Props) {
   const [lodging, setLodging] = useState("");
   const [personalSpots, setPersonalSpots] = useState<SavedSpot[]>([]);
   useEffect(() => {
     const timer = window.setTimeout(() => setPersonalSpots(loadLocalState().spots.filter((spot) => spot.status === "visited-revisit" && spot.city.toLowerCase() === event.city.toLowerCase())), 0);
     return () => window.clearTimeout(timer);
   }, [event.city]);
-  const days = useMemo(() => buildKoreaTripPlan({ event, flight, venueArrivalAt: feasibility.venueArrivalAt, immigrationMinutes: feasibility.assumptions.immigrationMinutes, lodging, assumedReturnHomeAt, personalSpots }), [assumedReturnHomeAt, event, feasibility, flight, lodging, personalSpots]);
+  const days = useMemo(() => buildKoreaTripPlan({ event, flight, returnFlight, venueArrivalAt: feasibility.venueArrivalAt, immigrationMinutes: feasibility.assumptions.immigrationMinutes, lodging, returnHomeAt: feasibility.returnHomeAt, personalSpots }), [event, feasibility, flight, lodging, personalSpots, returnFlight]);
 
   function downloadCalendar() {
     const blob = new Blob([createTripPlanIcs(days, `${event.artist} · ${event.title}`)], { type: "text/calendar;charset=utf-8" });
@@ -31,12 +31,15 @@ export function TripPlanView({ event, flight, feasibility, assumedReturnHomeAt, 
     const link = document.createElement("a");
     link.href = url;
     link.download = `ticketclub-${event.id}.ics`;
+    document.body.appendChild(link);
     link.click();
-    URL.revokeObjectURL(url);
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
   }
 
-  function formatTime(iso: string) {
-    return new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Seoul" }).format(new Date(iso));
+  function formatTime(iso: string, itemId: string) {
+    const timeZone = itemId === "outbound-flight" || itemId === "return-home" ? "Australia/Melbourne" : "Asia/Seoul";
+    return new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone }).format(new Date(iso));
   }
 
   return <section className="trip-plan-panel" aria-labelledby="trip-plan-title">
@@ -44,7 +47,7 @@ export function TripPlanView({ event, flight, feasibility, assumedReturnHomeAt, 
     <div className="trip-plan-controls">
       <label><span><MapPin size={17} /> 韩国住宿地址</span><input value={lodging} onChange={(input) => setLodging(input.target.value)} placeholder="粘贴酒店或 Airbnb 地址" /></label>
     </div>
-    <div className="trip-day-list">{days.map((day) => <article key={day.date} className="trip-day"><header><span>{day.label}</span><time>{day.date}</time></header><ol>{day.items.map((item) => <li key={item.id} className={`trip-item trip-item--${item.kind}`}><time>{formatTime(item.startAt)}</time><span className="trip-item-dot">{item.kind === "flight" ? <AirplaneTilt size={14} weight="fill" /> : item.kind === "event" ? <Sparkle size={14} weight="fill" /> : <Check size={13} weight="bold" />}</span><div><h3>{item.title}{item.optional ? <small>可选</small> : null}</h3><p>{item.location}</p><span>{item.note}</span></div></li>)}</ol></article>)}</div>
+    <div className="trip-day-list">{days.map((day) => <article key={day.date} className="trip-day"><header><span>{day.label}</span><time>{day.date}</time></header><ol>{day.items.map((item) => <li key={item.id} className={`trip-item trip-item--${item.kind}`}><time>{formatTime(item.startAt, item.id)}</time><span className="trip-item-dot">{item.kind === "flight" ? <AirplaneTilt size={14} weight="fill" /> : item.kind === "event" ? <Sparkle size={14} weight="fill" /> : <Check size={13} weight="bold" />}</span><div><h3>{item.title}{item.optional ? <small>可选</small> : null}</h3><p>{item.location}</p><span>{item.note}</span></div></li>)}</ol></article>)}</div>
     <aside className="trip-plan-honesty"><strong>请在出发前再次核对</strong><p>航班、活动结束时间、交通耗时和附近场次可能变化。日历导出保存的是当前确认版本，不会自动同步第三方变更。</p></aside>
   </section>;
 }
