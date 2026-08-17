@@ -23,8 +23,8 @@ test("server renders the TicketClub home experience", async () => {
 
   const html = await response.text();
   assert.match(html, /TicketClub 票来/);
-  assert.match(html, /等待下一张真实票根/);
-  assert.match(html, /还没有确认过的真实活动/);
+  assert.match(html, /下一场，正在读取/);
+  assert.match(html, /播放队列还是空的/);
   assert.doesNotMatch(html, /Summer Memory Club|Inkigayo|Music Bank|Fan Signing/);
   assert.doesNotMatch(html, /Your site is taking shape|Building your site/);
 });

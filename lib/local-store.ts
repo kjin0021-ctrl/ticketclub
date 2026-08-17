@@ -41,6 +41,12 @@ export interface DecisionDraft {
   originAirport?: string;
   destinationAirport?: string;
   assumedReturnHomeAt?: string;
+  returnFlightNumber?: string;
+  returnFlightDepartureAt?: string;
+  returnFlightArrivalAt?: string;
+  returnFlightStops?: number;
+  returnOriginAirport?: string;
+  returnDestinationAirport?: string;
   timeAssumptions?: TimeAssumptions;
   updatedAt: string;
 }
@@ -74,9 +80,12 @@ export interface ImportedPost {
   text?: string;
   importedAt: string;
   status?: "pending" | "confirmed" | "ignored";
-  origin?: "manual_x" | "github_monitor";
+  origin?: "manual_x" | "manual_public" | "github_monitor";
   cloudIssueUrl?: string;
+  sourceTrust?: SourceTrust;
 }
+
+export type SourceTrust = "artist_official" | "organizer_official" | "ticketing_official" | "media" | "fan";
 
 export interface ConfirmedImportedEvent {
   id: string;
@@ -85,11 +94,25 @@ export interface ConfirmedImportedEvent {
   title: string;
   eventType: string;
   startsAt: string;
+  ticketingAt?: string;
+  checkInAt?: string;
+  rehearsalAt?: string;
+  doorsAt?: string;
   venue: string;
   city: string;
   countryCode: string;
   confirmedAt: string;
   dedupeFingerprint: string;
+  extractionEvidence?: Array<{ field: string; excerpt: string }>;
+  changeHistory?: EventChangeRecord[];
+  status?: "scheduled" | "postponed" | "cancelled";
+}
+
+export interface EventChangeRecord {
+  id: string;
+  changedAt: string;
+  sourcePostId: string;
+  changes: Array<{ field: "startsAt" | "venue" | "city" | "eventType" | "status"; before: string; after: string }>;
 }
 
 export interface SavedSpot {
@@ -132,8 +155,24 @@ export function createEventFingerprint(artistId: string, startsAt: string, title
 export function mergeConfirmedEvent(events: ConfirmedImportedEvent[], event: ConfirmedImportedEvent) {
   const duplicate = events.find((item) => item.dedupeFingerprint === event.dedupeFingerprint);
   return duplicate
-    ? events.map((item) => item.id === duplicate.id ? { ...item, sourcePostIds: [...new Set([...(item.sourcePostIds ?? []), ...event.sourcePostIds])] } : item)
+    ? events.map((item) => item.id === duplicate.id ? event.status && event.status !== (item.status ?? "scheduled")
+      ? updateConfirmedEvent(item, event, event.sourcePostIds[0] ?? "unknown", event.confirmedAt)
+      : { ...item, sourcePostIds: [...new Set([...(item.sourcePostIds ?? []), ...event.sourcePostIds])] } : item)
     : [event, ...events];
+}
+
+export function findPossibleEventUpdate(events: ConfirmedImportedEvent[], event: Pick<ConfirmedImportedEvent, "artistId" | "title" | "dedupeFingerprint">) {
+  return events.find((item) => item.dedupeFingerprint !== event.dedupeFingerprint && item.artistId === event.artistId && normalizeEventName(item.title) === normalizeEventName(event.title));
+}
+
+export function updateConfirmedEvent(existing: ConfirmedImportedEvent, next: ConfirmedImportedEvent, sourcePostId: string, changedAt = new Date().toISOString()) {
+  const comparable = ["startsAt", "venue", "city", "eventType", "status"] as const;
+  const changes = comparable.flatMap((field) => existing[field] === next[field] ? [] : [{ field, before: existing[field], after: next[field] }]);
+  return {
+    ...existing, ...next, id: existing.id,
+    sourcePostIds: [...new Set([...(existing.sourcePostIds ?? []), ...(next.sourcePostIds ?? [])])],
+    changeHistory: changes.length ? [...(existing.changeHistory ?? []), { id: `${sourcePostId}-${changedAt}`, changedAt, sourcePostId, changes }] : existing.changeHistory,
+  } satisfies ConfirmedImportedEvent;
 }
 
 export interface TicketClubLocalState {
@@ -186,12 +225,36 @@ export function createEmptyLocalState(): TicketClubLocalState {
   };
 }
 
+const legacyDemoPostUrls = new Set([
+  "https://x.com/We_KiiiKiii/status/2234567890123456789",
+  "https://x.com/We_KiiiKiii/status/3234567890123456789",
+]);
+
+export function removeLegacyDemoData(state: TicketClubLocalState): TicketClubLocalState {
+  const demoPostIds = new Set(state.importedPosts.filter((post) => legacyDemoPostUrls.has(post.url) || /Summer Memory Club FAN MEETING/i.test(post.text ?? "")).map((post) => post.id));
+  const demoEventIds = new Set(state.confirmedImportedEvents
+    .filter((event) => event.title === "Summer Memory Club FAN MEETING" || event.sourcePostIds.some((id) => demoPostIds.has(id)))
+    .map((event) => event.id));
+  const demoRuns = state.feasibilityRuns.filter((run) => demoEventIds.has(run.eventId));
+  const demoAvailabilityIds = new Set(demoRuns.map((run) => run.availabilityId));
+  return {
+    ...state,
+    importedPosts: state.importedPosts.filter((post) => !demoPostIds.has(post.id)),
+    confirmedImportedEvents: state.confirmedImportedEvents.filter((event) => !demoEventIds.has(event.id)),
+    attendanceByEvent: Object.fromEntries(Object.entries(state.attendanceByEvent).filter(([eventId]) => !demoEventIds.has(eventId))),
+    decisionDrafts: Object.fromEntries(Object.entries(state.decisionDrafts).filter(([eventId]) => !demoEventIds.has(eventId))),
+    feasibilityRuns: state.feasibilityRuns.filter((run) => !demoEventIds.has(run.eventId)),
+    availability: state.availability.filter((item) => !demoAvailabilityIds.has(item.id)),
+    notifications: state.notifications.filter((item) => !item.eventId || !demoEventIds.has(item.eventId)),
+  };
+}
+
 export function parseLocalState(raw: string | null): TicketClubLocalState {
   if (!raw) return createEmptyLocalState();
   try {
     const parsed = JSON.parse(raw) as Partial<TicketClubLocalState>;
     if (parsed.version !== 1) return createEmptyLocalState();
-    return {
+    return removeLegacyDemoData({
       version: 1,
       attendanceByEvent: parsed.attendanceByEvent ?? {},
       availability: Array.isArray(parsed.availability) ? parsed.availability : [],
@@ -216,7 +279,7 @@ export function parseLocalState(raw: string | null): TicketClubLocalState {
       spots: Array.isArray(parsed.spots) ? parsed.spots : [],
       notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [],
       sourceFailureCounts: parsed.sourceFailureCounts ?? {},
-    };
+    });
   } catch {
     return createEmptyLocalState();
   }
@@ -226,7 +289,11 @@ export function loadLocalState(): TicketClubLocalState {
   if (typeof window === "undefined") return memoryFallback ?? createEmptyLocalState();
   try {
     if (!window.localStorage) return memoryFallback ?? createEmptyLocalState();
-    return parseLocalState(window.localStorage.getItem(TICKETCLUB_STORAGE_KEY));
+    const raw = window.localStorage.getItem(TICKETCLUB_STORAGE_KEY);
+    const parsed = parseLocalState(raw);
+    const serialized = JSON.stringify(parsed);
+    if (raw !== serialized) window.localStorage.setItem(TICKETCLUB_STORAGE_KEY, serialized);
+    return parsed;
   } catch {
     return memoryFallback ?? createEmptyLocalState();
   }
@@ -335,16 +402,42 @@ export function saveImportedPost(post: ImportedPost) {
   }));
 }
 
-export function resolveImportedPost(postId: string, status: "confirmed" | "ignored", event?: ConfirmedImportedEvent) {
+export function resolveImportedPost(postId: string, status: "confirmed" | "ignored", event?: ConfirmedImportedEvent, updateEventId?: string) {
   return updateLocalState((state) => {
     let confirmedImportedEvents = state.confirmedImportedEvents;
+    let notifications = state.notifications;
     if (event) {
-      confirmedImportedEvents = mergeConfirmedEvent(confirmedImportedEvents, event);
+      const existing = updateEventId ? confirmedImportedEvents.find((item) => item.id === updateEventId) : undefined;
+      if (existing) {
+        const updated = updateConfirmedEvent(existing, event, postId);
+        const latestChange = updated.changeHistory?.at(-1);
+        confirmedImportedEvents = confirmedImportedEvents.map((item) => item.id === existing.id ? updated : item);
+        if (latestChange?.sourcePostId === postId) notifications = [{ id: `event-change-${postId}`, kind: "changed_event", title: `${updated.title} 有变更`, body: latestChange.changes.map((change) => `${change.field}: ${change.before} → ${change.after}`).join("；"), eventId: updated.id, createdAt: latestChange.changedAt }, ...notifications];
+      } else confirmedImportedEvents = mergeConfirmedEvent(confirmedImportedEvents, event);
     }
     return {
       ...state,
       importedPosts: state.importedPosts.map((post) => post.id === postId ? { ...post, status } : post),
       confirmedImportedEvents,
+      notifications,
     };
+  });
+}
+
+export function resolveImportedPostBatch(postId: string, events: ConfirmedImportedEvent[], updateEventIds: Array<string | undefined> = []) {
+  return updateLocalState((state) => {
+    let confirmedImportedEvents = state.confirmedImportedEvents;
+    let notifications = state.notifications;
+    events.forEach((event, index) => {
+      const updateId = updateEventIds[index];
+      const existing = updateId ? confirmedImportedEvents.find((item) => item.id === updateId) : undefined;
+      if (existing) {
+        const updated = updateConfirmedEvent(existing, event, postId);
+        const latestChange = updated.changeHistory?.at(-1);
+        confirmedImportedEvents = confirmedImportedEvents.map((item) => item.id === existing.id ? updated : item);
+        if (latestChange?.sourcePostId === postId) notifications = [{ id: `event-change-${postId}-${index}`, kind: "changed_event", title: `${updated.title} 有变更`, body: latestChange.changes.map((change) => `${change.field}: ${change.before} → ${change.after}`).join("；"), eventId: updated.id, createdAt: latestChange.changedAt }, ...notifications];
+      } else confirmedImportedEvents = mergeConfirmedEvent(confirmedImportedEvents, event);
+    });
+    return { ...state, importedPosts: state.importedPosts.map((post) => post.id === postId ? { ...post, status: "confirmed" as const } : post), confirmedImportedEvents, notifications };
   });
 }

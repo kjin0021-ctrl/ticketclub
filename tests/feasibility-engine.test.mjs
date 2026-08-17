@@ -57,3 +57,25 @@ test("user timing assumptions override every decision segment", () => {
   assert.equal(result.eventBufferMinutes, 195);
   assert.match(result.timeline[1].detail, /机场提前 180 分钟/);
 });
+
+test("rejects a return flight that leaves before the fan can reach the airport", () => {
+  const result = calculateFeasibility({
+    ...baseInput,
+    returnFlight: { flightNumber: "KE401", departureAt: "2026-08-29T13:00:00Z", arrivalAt: "2026-08-30T02:00:00Z", stops: 0, originAirport: "ICN", destinationAirport: "MEL" },
+  });
+  assert.equal(result.outboundFeasible, true);
+  assert.equal(result.canCatchReturnFlight, false);
+  assert.equal(result.returnFeasible, false);
+  assert.match(result.reason, /无法及时赶到返程机场/);
+});
+
+test("accepts a complete round trip and reports an extra hotel night", () => {
+  const result = calculateFeasibility({
+    ...baseInput,
+    returnFlight: { flightNumber: "KE401", departureAt: "2026-08-30T11:00:00Z", arrivalAt: "2026-08-31T00:00:00Z", stops: 0, originAirport: "ICN", destinationAirport: "MEL" },
+  });
+  assert.equal(result.feasible, true);
+  assert.equal(result.returnFeasible, true);
+  assert.equal(result.needsExtraNight, true);
+  assert.equal(result.timeline.at(-1).id, "return-home");
+});

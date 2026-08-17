@@ -19,3 +19,15 @@ test("cloud alerts enter the confirmation inbox once", () => {
   const second = mergeCloudIssues(first, [issue]);
   assert.equal(second.importedPosts.length, 1);
 });
+
+test("source failures go to notifications instead of the event inbox", () => {
+  const failurePayload = { version: 1, alerts: [{ kind: "连续失败 3 次", artist: "KiiiKiii", sourceId: "source-1", sourceLabel: "Official news", title: "信息源需要检查", text: "HTTP 503", url: "https://example.com/news", detectedAt: "2026-08-17T00:00:00Z" }] };
+  const failureIssue = { ...issue, number: 13, body: `<!-- ticketclub-alert-v1 -->\n\`\`\`json\n${JSON.stringify(failurePayload)}\n\`\`\`` };
+  const state = createEmptyLocalState();
+  state.importedPosts.push({ id: "github-13-0", artistId: "artist-kiiikiii", url: "https://example.com/news", text: "信息源需要检查", importedAt: "2026-08-17T00:00:00Z", status: "pending", origin: "github_monitor" });
+  const merged = mergeCloudIssues(state, [failureIssue]);
+  assert.equal(merged.importedPosts.length, 0);
+  assert.equal(merged.notifications.length, 1);
+  assert.equal(merged.notifications[0].kind, "source_failure");
+  assert.equal(mergeCloudIssues(merged, [failureIssue]).notifications.length, 1);
+});

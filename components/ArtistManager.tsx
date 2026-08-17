@@ -19,9 +19,10 @@ import {
   saveSource,
   type SavedArtist,
   type SavedSource,
+  type SourceTrust,
   type TicketClubLocalState,
 } from "../lib/local-store";
-import { buildXProfileUrl, isXPostUrl, normalizeXHandle, testRssConnection } from "../lib/source-adapters";
+import { buildXProfileUrl, isPublicAnnouncementUrl, isXPostUrl, normalizeXHandle, testRssConnection } from "../lib/source-adapters";
 import { Button } from "./ui/Button";
 
 interface ArtistManagerProps {
@@ -42,6 +43,8 @@ export function ArtistManager({ onBack }: ArtistManagerProps) {
   const [postUrl, setPostUrl] = useState("");
   const [postText, setPostText] = useState("");
   const [postMessage, setPostMessage] = useState("");
+  const [isReadingPost, setIsReadingPost] = useState(false);
+  const [sourceTrust, setSourceTrust] = useState<SourceTrust>("artist_official");
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -122,15 +125,32 @@ export function ArtistManager({ onBack }: ArtistManagerProps) {
     setRssUrl("");
   }
 
-  function importPost() {
-    if (!selectedArtist || !isXPostUrl(postUrl)) {
-      setPostMessage("请粘贴包含 /status/帖子编号 的完整 X 链接。");
+  async function importPost() {
+    if (!selectedArtist || !isPublicAnnouncementUrl(postUrl)) {
+      setPostMessage("请粘贴以 https:// 开头的 X 帖子或公开官方公告链接。");
       return;
     }
-    refresh(saveImportedPost({ id: crypto.randomUUID(), artistId: selectedArtist.id, url: postUrl.trim(), text: postText.trim() || undefined, importedAt: new Date().toISOString(), status: "pending", origin: "manual_x" }));
-    setPostMessage("已保存到待识别列表，并保留原始 X 链接。");
-    setPostUrl("");
-    setPostText("");
+    setIsReadingPost(true);
+    setPostMessage(postText.trim() ? "正在送入免费识别…" : "正在安全读取公开页面…");
+    try {
+      let readableText = postText.trim();
+      let resolvedUrl = postUrl.trim();
+      if (!readableText) {
+        const response = await fetch("/api/announcements/read", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: resolvedUrl }) });
+        const payload = await response.json() as { url?: string; text?: string; error?: string };
+        if (!response.ok || !payload.text) throw new Error(payload.error ?? "页面没有返回可识别正文。");
+        readableText = payload.text;
+        resolvedUrl = payload.url ?? resolvedUrl;
+      }
+      refresh(saveImportedPost({ id: crypto.randomUUID(), artistId: selectedArtist.id, url: resolvedUrl, text: readableText, importedAt: new Date().toISOString(), status: "pending", origin: isXPostUrl(resolvedUrl) ? "manual_x" : "manual_public", sourceTrust }));
+      setPostMessage(postText.trim() ? "已进入待识别收件箱，原始链接会作为来源凭证。" : "页面读取成功，已进入待识别收件箱等待你确认。");
+      setPostUrl("");
+      setPostText("");
+    } catch (error) {
+      setPostMessage(error instanceof Error ? error.message : "页面读取失败，请补充公告正文。");
+    } finally {
+      setIsReadingPost(false);
+    }
   }
 
   return (
@@ -182,11 +202,12 @@ export function ArtistManager({ onBack }: ArtistManagerProps) {
             </section>
 
             <section className="connector-panel connector-panel--manual">
-              <div className="connector-panel__icon"><LinkSimple size={22} /></div><h3>粘贴单条 X 帖子</h3><p>免费且最可靠的备用入口。帖子会进入待识别列表，原始链接不会丢失。</p>
-              <label><span>帖子完整链接</span><input value={postUrl} onChange={(event) => setPostUrl(event.target.value)} placeholder="https://x.com/artist/status/..." /></label>
-              <label className="post-text-label"><span>帖子文字（建议粘贴）</span><textarea value={postText} onChange={(event) => setPostText(event.target.value)} placeholder="粘贴正文后可以立即免费识别活动信息" rows={3} /></label>
+              <div className="connector-panel__icon"><LinkSimple size={22} /></div><h3>粘贴公开活动公告</h3><p>官网和票务页只需粘贴链接即可读取；X、登录页或读取失败的页面请补充正文。所有结果仍需你确认。</p>
+              <label><span>公开来源完整链接</span><input value={postUrl} onChange={(event) => setPostUrl(event.target.value)} placeholder="https://x.com/... 或 https://官方站点/..." /></label>
+              <label className="post-text-label"><span>公告文字（建议粘贴）</span><textarea value={postText} onChange={(event) => setPostText(event.target.value)} placeholder="粘贴正文后可以立即免费识别活动信息" rows={3} /></label>
+              <label><span>这条来源属于</span><select value={sourceTrust} onChange={(event) => setSourceTrust(event.target.value as SourceTrust)}><option value="artist_official">艺人官方</option><option value="organizer_official">主办方官方</option><option value="ticketing_official">官方票务</option><option value="media">媒体</option><option value="fan">粉丝整理</option></select></label>
               {postMessage ? <p className="connector-message" aria-live="polite">{postMessage}</p> : null}
-              <Button tone="secondary" onClick={importPost} icon={<Plus size={17} />}>加入待识别</Button>
+              <Button tone="secondary" disabled={!postUrl.trim() || isReadingPost} onClick={importPost} icon={<Plus size={17} />}>{isReadingPost ? "正在读取页面" : postText.trim() ? "用正文识别" : "读取链接并识别"}</Button>
             </section>
           </div>
 

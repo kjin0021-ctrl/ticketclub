@@ -36,10 +36,11 @@ function nearbyIso(event: NearbyEvent, year: string) {
 export function buildKoreaTripPlan(input: {
   event: ArtistEvent;
   flight: CandidateFlight;
+  returnFlight: CandidateFlight;
   venueArrivalAt: string;
   immigrationMinutes: number;
   lodging: string;
-  assumedReturnHomeAt: string;
+  returnHomeAt: string;
   nearbyEvents?: NearbyEvent[];
   includeNearbyIds?: string[];
   personalSpots?: Array<{ id: string; name: string; address: string; suitableTime?: string }>;
@@ -116,18 +117,14 @@ export function buildKoreaTripPlan(input: {
   } else {
     items.push({ id: "personal-spots", title: "为个人收藏地点留出的时间", startAt: personalStart, endAt: addMinutes(personalStart, 240), location: input.event.city, note: "从“活点地图”优先放入去过且想再去的地点", kind: "personal" });
   }
-  items.push({
-    id: "return-home",
-    title: "预计返程到家",
-    startAt: input.assumedReturnHomeAt,
-    endAt: addMinutes(input.assumedReturnHomeAt, 30),
-    location: "Home",
-    note: "返程航班尚未确认时，此时间仅作为返家约束",
-    kind: "return",
-  });
+  items.push(
+    { id: "return-airport", title: "前往返程机场", startAt: addMinutes(input.returnFlight.departureAt, -240), endAt: addMinutes(input.returnFlight.departureAt, -150), location: input.returnFlight.originAirport, note: "含市区交通缓冲；请按实际住宿位置调整", kind: "transfer" },
+    { id: "return-flight", title: `${input.returnFlight.flightNumber} 返回`, startAt: input.returnFlight.departureAt, endAt: input.returnFlight.arrivalAt, location: `${input.returnFlight.originAirport} → ${input.returnFlight.destinationAirport}`, note: input.returnFlight.stops ? `${input.returnFlight.stops} 次转机；请以航司通知为准` : "直飞；请以航司通知为准", kind: "flight" },
+    { id: "return-home", title: "预计回到家", startAt: input.returnHomeAt, endAt: addMinutes(input.returnHomeAt, 30), location: "Home", note: "抵达机场后加上你填写的机场到家时间", kind: "return" },
+  );
 
   const groups = new Map<string, TripPlanItem[]>();
-  for (const item of items.sort((a, b) => a.startAt.localeCompare(b.startAt))) {
+  for (const item of items.sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime())) {
     const date = seoulDate(item.startAt);
     groups.set(date, [...(groups.get(date) ?? []), item]);
   }

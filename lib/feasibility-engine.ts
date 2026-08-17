@@ -5,6 +5,9 @@ export interface TimeAssumptions {
   airportAdvanceMinutes: number;
   immigrationMinutes: number;
   arrivalAirportToVenueMinutes: number;
+  eventDurationMinutes: number;
+  postEventExitMinutes: number;
+  venueToAirportMinutes: number;
   venueArrivalLeadMinutes: Record<RiskMode, number>;
 }
 
@@ -24,7 +27,8 @@ export interface FeasibilityInput {
   eventCheckInAt?: string;
   riskMode: RiskMode;
   outboundFlight: CandidateFlight;
-  assumedReturnHomeAt: string;
+  returnFlight?: CandidateFlight;
+  assumedReturnHomeAt?: string;
   assumptions?: Partial<TimeAssumptions>;
 }
 
@@ -39,6 +43,11 @@ export interface FeasibilityResult {
   feasible: boolean;
   outboundFeasible: boolean;
   returnFeasible: boolean;
+  canCatchReturnFlight: boolean;
+  returnHomeAt: string;
+  eventEndsAt: string;
+  earliestReturnFlightAt: string;
+  needsExtraNight: boolean;
   venueArrivalAt: string;
   requiredVenueArrivalBy: string;
   latestHomeDepartureAt: string;
@@ -53,6 +62,9 @@ export const defaultTimeAssumptions: TimeAssumptions = {
   airportAdvanceMinutes: 150,
   immigrationMinutes: 120,
   arrivalAirportToVenueMinutes: 90,
+  eventDurationMinutes: 180,
+  postEventExitMinutes: 45,
+  venueToAirportMinutes: 90,
   venueArrivalLeadMinutes: {
     relaxed: 360,
     standard: 120,
@@ -92,10 +104,22 @@ export function calculateFeasibility(input: FeasibilityInput): FeasibilityResult
     input.outboundFlight.departureAt,
     assumptions.airportAdvanceMinutes + assumptions.homeToAirportMinutes,
   );
+  const eventEndsAt = addMinutes(input.eventStartsAt, assumptions.eventDurationMinutes);
+  const earliestReturnFlightAt = addMinutes(
+    eventEndsAt,
+    assumptions.postEventExitMinutes + assumptions.venueToAirportMinutes + assumptions.airportAdvanceMinutes,
+  );
 
   const canLeaveHome = new Date(input.availableFrom) <= new Date(latestHomeDepartureAt);
   const canReachEvent = new Date(venueArrivalAt) <= new Date(requiredVenueArrivalBy);
-  const returnFeasible = new Date(input.assumedReturnHomeAt) <= new Date(input.mustReturnBy);
+  const returnHomeAt = input.returnFlight
+    ? addMinutes(input.returnFlight.arrivalAt, assumptions.homeToAirportMinutes)
+    : input.assumedReturnHomeAt ?? input.mustReturnBy;
+  const canCatchReturnFlight = input.returnFlight
+    ? new Date(input.returnFlight.departureAt) >= new Date(earliestReturnFlightAt)
+    : true;
+  const returnByDeadline = new Date(returnHomeAt) <= new Date(input.mustReturnBy);
+  const returnFeasible = canCatchReturnFlight && returnByDeadline;
   const outboundFeasible = canLeaveHome && canReachEvent;
   const feasible = outboundFeasible && returnFeasible;
   const eventBufferMinutes = Math.floor(
@@ -105,12 +129,24 @@ export function calculateFeasibility(input: FeasibilityInput): FeasibilityResult
   let reason = "时间条件允许完成这次行程";
   if (!canLeaveHome) reason = "你的空闲时间晚于最晚离家时间";
   else if (!canReachEvent) reason = "该航班抵达场馆时已经超过风险模式要求";
-  else if (!returnFeasible) reason = "预计回家时间晚于你必须返家的时间";
+  else if (!canCatchReturnFlight) reason = "演出散场后无法及时赶到返程机场";
+  else if (!returnByDeadline) reason = "返程航班到家时间晚于你必须返家的时间";
+
+  const eventSeoulDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date(eventEndsAt));
+  const returnSeoulDate = input.returnFlight
+    ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date(input.returnFlight.departureAt))
+    : eventSeoulDate;
+  const needsExtraNight = returnSeoulDate > eventSeoulDate;
 
   return {
     feasible,
     outboundFeasible,
     returnFeasible,
+    canCatchReturnFlight,
+    returnHomeAt,
+    eventEndsAt,
+    earliestReturnFlightAt,
+    needsExtraNight,
     venueArrivalAt,
     requiredVenueArrivalBy,
     latestHomeDepartureAt,
@@ -142,6 +178,26 @@ export function calculateFeasibility(input: FeasibilityInput): FeasibilityResult
         title: "抵达场馆周边",
         detail: eventBufferMinutes >= 0 ? `比要求时间早 ${eventBufferMinutes} 分钟` : `比要求时间晚 ${Math.abs(eventBufferMinutes)} 分钟`,
       },
+      ...(input.returnFlight ? [
+        {
+          id: "event-end",
+          at: eventEndsAt,
+          title: "预计散场",
+          detail: `演出 ${assumptions.eventDurationMinutes} 分钟 + 离场 ${assumptions.postEventExitMinutes} 分钟`,
+        },
+        {
+          id: "return-flight",
+          at: input.returnFlight.departureAt,
+          title: `${input.returnFlight.flightNumber} 返程起飞`,
+          detail: canCatchReturnFlight ? "满足散场、去机场与提前值机的时间约束" : "散场后无法按当前预留赶上",
+        },
+        {
+          id: "return-home",
+          at: returnHomeAt,
+          title: "预计回到家",
+          detail: returnByDeadline ? "在你的返家期限内" : "晚于你的返家期限",
+        },
+      ] : []),
     ],
   };
 }

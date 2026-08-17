@@ -19,7 +19,7 @@ export function NotificationCenter({ onBack, onOpenSetup }: { onBack: () => void
   return <section className="notification-center">
     <header className="notification-heading">
       <Button tone="quiet" icon={<ArrowLeft size={18} />} onClick={onBack}>返回</Button>
-      <div><p>YOUR TICKET WIRE</p><h1>通知中心</h1><span>只有新活动、改期、取消或连续失败才会打扰你。</span></div>
+      <div><p>SIGNAL LOG</p><h1>通知中心</h1><span>只有新活动、改期、取消或连续失败才会打扰你。</span></div>
       <Button tone="secondary" icon={<GearSix size={17} />} onClick={onOpenSetup}>设置自动检查</Button>
     </header>
 

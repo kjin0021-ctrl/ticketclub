@@ -42,7 +42,27 @@ export function createLocalEstimate(input: {
     originAirport: input.originAirport ?? "MEL",
     destinationAirport: input.destinationAirport ?? "ICN",
     source: "local-estimate",
-    sourceLabel: "本地演示估算",
+    sourceLabel: "本地时间估算",
+    verifiedLive: false,
+  };
+}
+
+export function createLocalReturnEstimate(input: {
+  departureAt: string;
+  arrivalAt: string;
+  originAirport?: string;
+  destinationAirport?: string;
+}): FlightCandidate {
+  return {
+    id: "local-return-estimate",
+    flightNumber: "TC RETURN",
+    departureAt: input.departureAt,
+    arrivalAt: input.arrivalAt,
+    stops: 0,
+    originAirport: input.originAirport ?? "ICN",
+    destinationAirport: input.destinationAirport ?? "MEL",
+    source: "local-estimate",
+    sourceLabel: "返程时间估算",
     verifiedLive: false,
   };
 }
